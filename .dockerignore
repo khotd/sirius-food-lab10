@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.aws
+.codex
+.agents
+**/__pycache__
+.pytest_cache
+sirius-food-frontend/node_modules
+sirius-food-frontend/.next
+reports
+*.log
+server_*.txt
+celerybeat-schedule.*

@@ -1,0 +1,126 @@
+x-app: &app
+  build: .
+  env_file: .env
+  environment: &app-env
+    DATABASE_URL: postgresql://sirius:sirius@db:5432/sirius_food
+    REDIS_URL: redis://redis:6379/0
+    RABBITMQ_URL: amqp://sirius:sirius@rabbitmq:5672/
+    DELIVERY_SERVICE_HOST: delivery
+    DELIVERY_SERVICE_PORT: 50061
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  migrate:
+    build: .
+    env_file: .env
+    environment: *app-env
+    command: python -m alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+  delivery:
+    <<: *app
+    command: python delivery_server.py
+  outbox:
+    <<: *app
+    command: python -m app.workers.outbox
+  kitchen:
+    <<: *app
+    command: python -m app.workers.kitchen_consumer
+  delivery-consumer:
+    <<: *app
+    command: python delivery_worker.py
+  payment-consumer:
+    <<: *app
+    command: python -m app.workers.payment_consumer
+  loyalty:
+    <<: *app
+    command: python -m app.workers.loyalty_consumer
+  promo:
+    <<: *app
+    command: python -m app.workers.promo_consumer
+  celery:
+    <<: *app
+    command: celery -A app.core.celery_app worker --loglevel=info
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: sirius
+      POSTGRES_PASSWORD: sirius
+      POSTGRES_DB: sirius_food
+    ports:
+      # DB_PORT позволяет сменить хост-порт, если 5432 занят
+      # (например, локальным PostgreSQL на Windows).
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "sirius", "-d", "sirius_food"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7
+    ports:
+      # REDIS_PORT позволяет сменить хост-порт, если 6379 занят
+      # локальной службой Redis (например, старой версией 5.x).
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    hostname: sirius-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: sirius
+      RABBITMQ_DEFAULT_PASS: sirius
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
+    volumes:
+      - rabbit_data:/var/lib/rabbitmq
+      - ./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+volumes:
+  pg_data:
+  rabbit_data:
+  prometheus_data:
+  grafana_data:

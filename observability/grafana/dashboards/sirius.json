@@ -1,0 +1,178 @@
+{
+  "uid": "sirius-lab9",
+  "title": "Сириус.Еда — наблюдаемость",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "RPS: создание и оплата заказа",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sirius-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(sirius_http_requests_total{method=\"POST\",route=~\"/orders/create|/orders/\\\\{order_id\\\\}/pay\"}[1m]))",
+          "refId": "A",
+          "legendFormat": "{{route}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sirius-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Задержка p95: список меню",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sirius-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sirius_http_request_duration_seconds_bucket{method=\"GET\",route=\"/menu/items\"}[1m])))",
+          "refId": "A",
+          "legendFormat": "p95",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sirius-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Ошибки HTTP 5xx",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sirius-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(sirius_http_requests_total{status=~\"5..\"}[1m])) or (0 * sum(up{job=\"sirius_app\"} == 1))",
+          "refId": "A",
+          "legendFormat": "5xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sirius-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Сообщения в очереди кухни",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sirius-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_queue_messages{queue=\"kitchen_queue\"})",
+          "refId": "A",
+          "legendFormat": "kitchen_queue",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sirius-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Доля попаданий в кеш Redis",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sirius-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(redis_keyspace_hits_total[5m])) / clamp_min(sum(rate(redis_keyspace_hits_total[5m])) + sum(rate(redis_keyspace_misses_total[5m])), 1e-9)",
+          "refId": "A",
+          "legendFormat": "hit rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sirius-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

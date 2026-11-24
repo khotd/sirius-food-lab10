@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+// Контракт микросервиса доставки (ЛР № 6: вынос модуля delivery в gRPC).
+// .proto — единственный источник правды: по нему генерируются и сервер,
+// и клиент (Stub), поэтому они всегда согласованы между собой.
+package delivery;
+
+service DeliveryService {
+  // Назначение курьера на заказ (unary).
+  rpc AssignCourier(AssignCourierRequest) returns (AssignCourierResponse);
+
+  // Завершение доставки (unary). courier_id обязателен: проверка
+  // «доставка принадлежит этому курьеру» (IDOR) выполняется в сервисе —
+  // бизнес-правило не покидает домен вместе с транспортом.
+  rpc CompleteDelivery(CompleteDeliveryRequest) returns (CompleteDeliveryResponse);
+
+  // Информация о доставке по ID заказа (unary).
+  rpc GetDelivery(GetDeliveryRequest) returns (GetDeliveryResponse);
+
+  // Доставки курьера (unary). Заменяет прямой доступ к таблице deliveries.
+  rpc ListDeliveries(ListDeliveriesRequest) returns (DeliveryListResponse);
+
+  // Server Streaming (критерий 9): трансляция хода доставки — сервер
+  // сам отправляет поток статусов (in_progress → on_the_way → delivered)
+  // с паузой 2 секунды, не дожидаясь отдельных запросов клиента.
+  rpc TrackDelivery(TrackDeliveryRequest) returns (stream DeliveryStatus);
+
+  // Bidirectional Streaming (критерий 10): чат «клиент ↔ курьер» —
+  // обе стороны читают и пишут в один открытый поток одновременно.
+  rpc ChatWithCourier(stream ChatMessage) returns (stream ChatMessage);
+}
+
+// --- Unary: назначение курьера ---
+message AssignCourierRequest {
+  int32 order_id = 1;
+  int32 courier_id = 2;
+}
+
+message AssignCourierResponse {
+  int32 delivery_id = 1;
+  string status = 2;
+}
+
+// --- Unary: завершение доставки ---
+message CompleteDeliveryRequest {
+  int32 delivery_id = 1;
+  int32 courier_id = 2;  // из JWT клиента: проверка владельца на сервере
+}
+
+message CompleteDeliveryResponse {
+  string delivery_status = 1;
+  string order_status = 2;
+}
+
+// --- Unary: доставка по ID заказа ---
+message GetDeliveryRequest {
+  int32 order_id = 1;
+}
+
+message GetDeliveryResponse {
+  int32 delivery_id = 1;
+  int32 order_id = 2;
+  int32 courier_id = 3;
+  string status = 4;
+}
+
+// --- Unary: список доставок курьера ---
+message ListDeliveriesRequest {
+  int32 courier_id = 1;
+}
+
+message DeliveryShort {
+  int32 delivery_id = 1;
+  int32 order_id = 2;
+  string status = 3;
+}
+
+message DeliveryListResponse {
+  repeated DeliveryShort deliveries = 1;
+}
+
+// --- Server Streaming: ход доставки ---
+message TrackDeliveryRequest {
+  int32 order_id = 1;
+}
+
+message DeliveryStatus {
+  int32 order_id = 1;
+  string status = 2;   // in_progress → on_the_way → delivered
+  string note = 3;     // человекочитаемая подпись этапа
+}
+
+// --- Bidirectional Streaming: чат с курьером ---
+message ChatMessage {
+  int32 order_id = 1;
+  string author = 2;   // "client" / "courier"
+  string text = 3;
+}

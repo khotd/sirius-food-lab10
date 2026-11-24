@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+celerybeat-schedule.*
+server_out.txt
+server_err.txt
+/api.log
+/kitchen.log
+/reports/
+/htmlcov/
+.coverage*
+/docs/lab10/load/**/*.html
+/docs/lab10/load/**/*.log
